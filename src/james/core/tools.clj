@@ -33,3 +33,7 @@
   [ts]
   (time/hour (tc/from-long ts)))
 
+(defn decorate-time
+  [m]
+  (let [date-ts (:date m)]
+    (merge m {:day-of-week (weekday-by-ts date-ts), :day-of-month (day-by-ts date-ts), :month  (month-by-ts date-ts), :hour (hour-by-ts date-ts)})))

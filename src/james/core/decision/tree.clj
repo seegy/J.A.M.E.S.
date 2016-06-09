@@ -1,5 +1,6 @@
 (ns james.core.decision.tree
-  (:use james.core.datamodel.nodes))
+  (:use james.core.datamodel.nodes)
+  (:use james.core.tools))
 
 
 (defn log2 [x]
@@ -111,6 +112,17 @@
 ;(most-frequent-n 2 [1 2 4 56 7 56 3 2 2 4 56 7 1 54 45 6 73 3 4 34 2 2 56]) ; -> (2 56)
 
 
+
+(defn get-decision-for
+  [pname]
+  (let [tree (build-decision-tree (get-decision-data))
+        timemap (decorate-time {:date (now)})
+        feed (merge timemap (get-last-order pname))]
+    (first (most-frequent-n 1 (filter #(not (nil? %))
+                                      (map #(tree-decide tree %) (all-submaps feed)))))))
+
+
+
 ; #####################################################################################################
 
 (def sample-data
@@ -133,9 +145,11 @@
 
 (build-decision-tree sample-data)
 
-(build-decision-tree (get-decision-data))
+(get-decision-for "Sören")
+(get-decision-for "Silvia")
+(get-decision-for "Heiko")
 
-(first (most-frequent-n 1 (filter #(not (nil? %)) (map #(tree-decide (build-decision-tree sample-data) %) (all-submaps {:outlook "Rain", :temperature  "Mild", :humidity  "High",   :wind  "Strong"})))))
+
 
 
 

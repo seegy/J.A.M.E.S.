@@ -139,6 +139,7 @@
       (ref-set james-graph (new-edge (new-edge (new-vertex @james-graph id (str rating "*") :rating ops)
                                                :hasRating food-id id {})
                                      :rates person-id id {}))
+      (save-memory @james-graph)
       id)))
 
 
@@ -187,10 +188,7 @@
          replacement (into {} (map (fn[k] [k (->> k name (str (name prefix) "-") keyword)]) keys-of-atts ))]
     (clojure.set/rename-keys attrs replacement)))
 
-(defn- decorate-time
-  [m]
-  (let [date-ts (:date m)]
-    (merge m {:day-of-week (weekday-by-ts date-ts), :day-of-month (day-by-ts date-ts), :month  (month-by-ts date-ts), :hour (hour-by-ts date-ts)})))
+
 
 (defn- distinct-by
   "Returns a lazy sequence of the elements of coll, removing any elements that
@@ -245,20 +243,42 @@
                                                          (assoc a
                                                            :further-food (:food-name b)
                                                            :further-rating (:rating-name b)
-                                                           :further-deliverer (:deliverer-name b)) :food-name :rating-name :deliverer-name :food-date )
+                                                           :further-deliverer (:deliverer-name b)) :person-birth :person-role :food-name :rating-name :deliverer-name :food-date )
                                                          (select-keys a [:food-name :deliverer-name])])
                                               sorted-list (conj sorted-list {})))) orders-by-peoples)))))
 
-(get-decision-data)
 
 
+(defn get-last-order
+  [pname]
+  (let [g @james-graph
+         pid (first (find-vertices g {:type :person :name pname}))
+        orders (map (fn [[_ oid]] [(attrs g  oid)
+                                   (attrs g (last (last (get-edges-by-type g oid :comesFrom))))
+                                   (attrs g (last (last (get-edges-by-type g oid :hasRating))))]) (get-edges-by-type g pid :ordered))
+       [lastorder lastdeliverer lastrating] (apply max-key #(:date (second %)) orders)]
+  {:person-name pname
+   :further-deliverer (:name lastdeliverer)
+   :further-food (:name lastorder)
+   :further-rating (:name lastrating)}))
+#_(
+
+(get-last-order "Heiko")
+(map second (get-edges-by-type @james-graph (first (find-vertices @james-graph {:type :person :name "Heiko"})) :ordered))
+
+(map #(get-edges-by-type @james-graph % :hasRating)
+     ["d6613663-a58d-4db2-868f-a519ab3ae5d5" "481b2bb7-d671-49ca-a6e2-12c5e49bfb29"
+      "71d19261-2293-445e-bd24-7db7c48efd1c"])
+
+(attrs @james-graph "481b2bb7-d671-49ca-a6e2-12c5e49bfb29"  )
+    )
 
 ; ############################################
 
 
 ; Some default data
 
-#(
+#_(
    (add-order-with-rating "1"
                           (add-food "Pizza-Brötchen"
                                     (find-or-create-deliverer "Napoli" {}) {})
@@ -314,8 +334,13 @@
                           1
                           (now) 3 "")
 
+  (add-order-with-rating (find-or-create-person "Heiko" {})
+                          (add-food "Enchilada"
+                                    (find-or-create-deliverer "Vulkan" {}) {})
+                          1
+                          1465334571000 5 "")
    )
 
 
 ;(nodes-filtered-by #(= "Sören" (:name %)) data-graph)
-; (view @james-graph)
+ ;(view @james-graph)
