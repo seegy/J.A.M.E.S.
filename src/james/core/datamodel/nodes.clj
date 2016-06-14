@@ -217,51 +217,90 @@
                    xs seen)))]
      (step coll #{}))))
 
-(defn get-decision-data
-  []
-  (let [g @james-graph
-        people (find-vertices g {:type :person})
-        people-and-orders (map (fn [p] [p (into #{} (remove #(= % p ) (flatten (get-edges-by-type g p :ordered))))]) people)
-        raw-orders (flatten (map (fn [[pid orders ]] (map (fn[foodid]
-                                                            (let [ get-target-id-of-edge (fn [source edgetype] (first (remove #(= % source ) (first (get-edges-by-type g source edgetype)))))
-                                                                   rating (get-target-id-of-edge foodid :hasRating )
-                                                                   deliverer (get-target-id-of-edge foodid :comesFrom )
-                                                                   get-prefixed-attrs (fn[id prefix nogos] (if (nil? id)
-                                                                                                             {}
-                                                                                                             (put-key-prefix
-                                                                                                               (apply dissoc (attrs g id) :label :type nogos)
-                                                                                                               prefix)))]
-                                                              (merge (get-prefixed-attrs pid :person #{:date})
-                                                                     (decorate-time (get-prefixed-attrs foodid :food #{}))
-                                                                     (get-prefixed-attrs rating :rating #{:date :note})
-                                                                     (get-prefixed-attrs deliverer :deliverer #{:date})
-                                                                     ))) orders)) people-and-orders))
-        orders-by-peoples (partition-by :person-name raw-orders)
-        ]
-    (into [] (apply concat (map (fn [list-of-orders] (let [sorted-list (sort-by :food-date (distinct-by :food-date list-of-orders))]
-                                         (mapv (fn[a b] [ (dissoc
-                                                         (assoc a
-                                                           :further-food (:food-name b)
-                                                           :further-rating (:rating-name b)
-                                                           :further-deliverer (:deliverer-name b)) :person-birth :person-role :food-name :rating-name :deliverer-name :food-date )
-                                                         (select-keys a [:food-name :deliverer-name])])
-                                              sorted-list (conj sorted-list {})))) orders-by-peoples)))))
-
 
 
 (defn get-last-order
   [pname]
   (let [g @james-graph
-         pid (first (find-vertices g {:type :person :name pname}))
+        pid (first (find-vertices g {:type :person :name pname}))
         orders (map (fn [[_ oid]] [(attrs g  oid)
                                    (attrs g (last (last (get-edges-by-type g oid :comesFrom))))
                                    (attrs g (last (last (get-edges-by-type g oid :hasRating))))]) (get-edges-by-type g pid :ordered))
-       [lastorder lastdeliverer lastrating] (apply max-key #(:date (second %)) orders)]
-  {:person-name pname
-   :further-deliverer (:name lastdeliverer)
-   :further-food (:name lastorder)
-   :further-rating (:name lastrating)}))
+        [lastorder lastdeliverer lastrating] (apply max-key #(:date (second %)) orders)]
+    {:person-name pname
+     :further-deliverer (:name lastdeliverer)
+     :further-food (:name lastorder)
+     :further-rating (:name lastrating)}))
+
+
+
+(defn travel
+  [nodes edge-type]
+  (let [nodes (if (coll? nodes)
+                (if (coll? (first nodes))
+                  (into #{} (map set nodes))
+                  #{(set nodes)})
+                #{#{nodes}})
+        g @james-graph ]
+    (into #{} (flatten (map (fn [ns]  (filter #(and (not (nil? %)) (coll? %) (not (empty? %)))
+                                              (map (fn[n] (when-not (vector? n)
+                                                            (map #(apply conj ns % %) (get-edges-by-type g n edge-type)))) ns))) nodes)))))
+
+
+
+
+
+(defn value-maps-by-ids
+  [ids]
+  (map (fn [e] (reduce (fn[m id] (let [attrs (if (vector? id)
+                                               (attrs @james-graph (first id) (second id))
+                                               (attrs @james-graph id))]
+                                   (assoc m (:type attrs) attrs))) {} e)) ids))
+
+
+
+(defn get-decision-data
+  []
+  (let [g @james-graph
+        people (find-vertices g {:type :person})
+        people-and-orders  (flatten (map #(-> %
+                                              (travel :ordered)
+                                              (travel :comesFrom)
+                                              (travel :hasRating)
+                                              (value-maps-by-ids)) people))
+        get-prefixed-attrs (fn[m prefix nogos]
+                             (put-key-prefix
+                               (apply dissoc m :label :type nogos)
+                               prefix))
+        raw-orders (map (fn [maps] (merge (get-prefixed-attrs (:person maps) :person #{:date})
+                                          (get-prefixed-attrs (:food maps) :food #{:date})
+                                          (get-prefixed-attrs (:rating maps) :rating #{:date :note})
+                                          (get-prefixed-attrs (:deliverer maps) :deliverer #{:date})
+                                          (decorate-time (get-prefixed-attrs (:ordered maps) :ordered #{}))))
+                        people-and-orders)
+        orders-by-peoples (partition-by :person-name raw-orders)]
+    (into [] (apply concat (map (fn [list-of-orders] (let [sorted-list (sort-by :ordered-date  (distinct-by :ordered-date  list-of-orders))]
+                                                       (mapv (fn[a b] [ (dissoc
+                                                                          (assoc a
+                                                                            :further-food (:food-name b)
+                                                                            :further-food-cat (:food-categorie b)
+                                                                            :further-rating (:rating-name b)
+                                                                            :further-deliverer (:deliverer-name b)) :person-birth :person-role :food-name :rating-name :deliverer-name :ordered-date :ordered-count )
+                                                                        (select-keys a [:food-name :deliverer-name])])
+                                                             sorted-list (conj sorted-list {})))) orders-by-peoples)))))
+
+
+
+
+
 #_(
+(def bla (-> "1"
+             (travel :ordered)
+             (travel :comesFrom)
+             (travel :hasRating)))
+
+(value-maps-by-ids bla)
+
 
 (get-last-order "Heiko")
 (map second (get-edges-by-type @james-graph (first (find-vertices @james-graph {:type :person :name "Heiko"})) :ordered))
@@ -271,7 +310,7 @@
       "71d19261-2293-445e-bd24-7db7c48efd1c"])
 
 (attrs @james-graph "481b2bb7-d671-49ca-a6e2-12c5e49bfb29"  )
-    )
+)
 
 ; ############################################
 
@@ -279,68 +318,68 @@
 ; Some default data
 
 #_(
-   (add-order-with-rating "1"
-                          (add-food "Pizza-Brötchen"
-                                    (find-or-create-deliverer "Napoli" {}) {})
-                          1
-                          1464192331000 5 "")
+    (add-order-with-rating "1"
+                           (add-food "Pizza-Brötchen"
+                                     (find-or-create-deliverer "Napoli" {}) {})
+                           1
+                           1464192331000 5 "")
 
-   (add-order-with-rating "1"
-                          (add-food "Mam Burger"
-                                    (find-or-create-deliverer "Napoli" {}) {})
-                          1
-                          1464192331000 3 "")
+    (add-order-with-rating "1"
+                           (add-food "Mam Burger"
+                                     (find-or-create-deliverer "Napoli" {}) {})
+                           1
+                           1464192331000 3 "")
 
-   (add-order-with-rating (find-or-create-person "Heiko" {})
-                          (add-food "Pizza-Brötchen"
-                                    (find-or-create-deliverer "Napoli" {}) {})
-                          1
-                          1464192331000 4 "")
+    (add-order-with-rating (find-or-create-person "Heiko" {})
+                           (add-food "Pizza-Brötchen"
+                                     (find-or-create-deliverer "Napoli" {}) {})
+                           1
+                           1464192331000 4 "")
 
 
-   (add-order-with-rating (find-or-create-person "Heiko" {})
-                          (add-food "Pizza"
-                                    (find-or-create-deliverer "Napoli" {}) {})
-                          1
-                          1464192331000 4 "")
+    (add-order-with-rating (find-or-create-person "Heiko" {})
+                           (add-food "Pizza"
+                                     (find-or-create-deliverer "Napoli" {}) {})
+                           1
+                           1464192331000 4 "")
 
-   (add-order-with-rating "1"
-                          (add-food "Ente süß-sauer"
-                                    (find-or-create-deliverer "China Boy" {}) {})
-                          1
-                          1464283100347 2 "")
+    (add-order-with-rating "1"
+                           (add-food "Ente süß-sauer"
+                                     (find-or-create-deliverer "China Boy" {}) {})
+                           1
+                           1464283100347 2 "")
 
-   (add-order-with-rating "1"
-                          (add-food "Pizza-Brötchen"
-                                    (find-or-create-deliverer "Napoli" {}) {})
-                          1
-                          1458492283000 4 "")
+    (add-order-with-rating "1"
+                           (add-food "Pizza-Brötchen"
+                                     (find-or-create-deliverer "Napoli" {}) {})
+                           1
+                           1458492283000 4 "")
 
-   (add-order-with-rating "1"
-                          (add-food "Pizza"
-                                    (find-or-create-deliverer "Napoli" {}) {})
-                          1
-                          1458492283000 3 "")
+    (add-order-with-rating "1"
+                           (add-food "Pizza"
+                                     (find-or-create-deliverer "Napoli" {}) {})
+                           1
+                           1458492283000 3 "")
 
-   (add-order-with-rating "1"
-                          (add-food "Pizza Hawaii"
-                                    (find-or-create-deliverer "Himalaya" {}) {})
-                          1
-                          (now) 3 "")
+    (add-order-with-rating "1"
+                           (add-food "Pizza Hawaii"
+                                     (find-or-create-deliverer "Himalaya" {}) {})
+                           1
+                           (now) 3 "")
 
-   (add-order-with-rating (find-or-create-person "Silvia" {})
-                          (add-food "Pizza Tonno"
-                                    (find-or-create-deliverer "Himalaya" {}) {})
-                          1
-                          (now) 3 "")
+    (add-order-with-rating (find-or-create-person "Silvia" {})
+                           (add-food "Pizza Tonno"
+                                     (find-or-create-deliverer "Himalaya" {}) {})
+                           1
+                           (now) 3 "")
 
-  (add-order-with-rating (find-or-create-person "Heiko" {})
-                          (add-food "Enchilada"
-                                    (find-or-create-deliverer "Vulkan" {}) {})
-                          1
-                          1465334571000 5 "")
-   )
+    (add-order-with-rating (find-or-create-person "Heiko" {})
+                           (add-food "Enchilada"
+                                     (find-or-create-deliverer "Vulkan" {}) {})
+                           1
+                           1465334571000 5 "")
+    )
 
 
 ;(nodes-filtered-by #(= "Sören" (:name %)) data-graph)
- ;(view @james-graph)
+;(view @james-graph)
