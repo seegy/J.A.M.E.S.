@@ -7,6 +7,23 @@
   "simple UUID creator"
   [] (str (java.util.UUID/randomUUID)))
 
+(defn flatten2
+  "Like `clojure.core/flatten` but better, stronger, faster.
+  Takes any nested combination of sequential things (lists, vectors,
+  etc.) and returns their contents as a single, flat, lazy sequence.
+  If the argument is non-sequential (numbers, maps, strings, nil,
+  etc.), returns the original argument."
+  {:static true}
+  [x]
+  (letfn [(flat [coll]
+                  (lazy-seq
+                   (when-let [c (seq coll)]
+                     (let [x (first c)]
+                       (if (sequential? x)
+                         (concat (flat x) (flat (rest c)))
+                         (cons x (flat (rest c))))))))]
+    (if (sequential? x) (flat x) x)))
+
 
 ; ################ TIME STAFF
 
