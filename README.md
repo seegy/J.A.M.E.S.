@@ -1,4 +1,4 @@
-# james
+# J.A.M.E.S. 
 
 FIXME: description
 
@@ -34,4 +34,4 @@ Copyright © 2016 FIXME
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
-# J.A.M.E.S. 
+
