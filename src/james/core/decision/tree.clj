@@ -117,8 +117,9 @@
 (defn get-decision-for
   ([pname cat?]
   (let [tree (build-decision-tree (get-decision-data cat?))
-        timemap (decorate-time {:date (now)})
+        timemap (put-key-prefix (decorate-time {:date (now)}) :ordered)
         feed (merge timemap (get-last-order pname))]
+    (println feed)
     (first (most-frequent-n 1 (filter #(not (nil? %))
                                       (map #(tree-decide tree %) (all-submaps feed)))))))
   ([pname]
@@ -127,16 +128,11 @@
 
 ; #####################################################################################################
 
+(build-decision-tree (get-decision-data true))
 
-(def traindata (get-decision-data false))
-
-(doseq  [s traindata]
-  (println s))
-;(build-decision-tree (get-decision-data false))
-
-;(get-decision-for "Sören")
-;(get-decision-for "Silvia")
-;(get-decision-for "Heiko")
+(get-decision-for "Sören")
+(get-decision-for "Silvia")
+(get-decision-for "Heiko")
 
 
 

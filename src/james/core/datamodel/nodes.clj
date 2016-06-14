@@ -182,11 +182,6 @@
                (filter (fn[edge] (= type (attr @james-graph (first edge) (second edge) :type)))))
              (distinct-edges (subgraph-reachable-from @james-graph node))))
 
-(defn- put-key-prefix
-  [attrs prefix]
-  (let [ keys-of-atts (keys attrs)
-         replacement (into {} (map (fn[k] [k (->> k name (str (name prefix) "-") keyword)]) keys-of-atts ))]
-    (clojure.set/rename-keys attrs replacement)))
 
 
 
@@ -217,36 +212,6 @@
                    xs seen)))]
      (step coll #{}))))
 
-(defn get-decision-data
-  [cat?]
-  (let [g @james-graph
-        people (find-vertices g {:type :person})
-        people-and-orders (map (fn [p] [p (into #{} (remove #(= % p ) (flatten (get-edges-by-type g p :ordered))))]) people)
-        raw-orders (flatten (map (fn [[pid orders ]] (map (fn[foodid]
-                                                            (let [ get-target-id-of-edge (fn [source edgetype] (first (remove #(= % source ) (first (get-edges-by-type g source edgetype)))))
-                                                                   rating (get-target-id-of-edge foodid :hasRating )
-                                                                   deliverer (get-target-id-of-edge foodid :comesFrom )
-                                                                   get-prefixed-attrs (fn[id prefix nogos] (if (nil? id)
-                                                                                                             {}
-                                                                                                             (put-key-prefix
-                                                                                                               (apply dissoc (attrs g id) :label :type nogos)
-                                                                                                               prefix)))]
-                                                              (merge (get-prefixed-attrs pid :person #{:date})
-                                                                     (decorate-time (assoc (get-prefixed-attrs foodid :food #{}) :food-date (:date (attrs g pid foodid))))
-                                                                     (get-prefixed-attrs rating :rating #{:date :note})
-                                                                     (get-prefixed-attrs deliverer :deliverer #{:date})
-                                                                     ))) orders)) people-and-orders))
-        orders-by-peoples (partition-by :person-name raw-orders)
-        ]
-    (into [] (apply concat (map (fn [list-of-orders] (let [sorted-list (sort-by :food-date (distinct-by :food-date list-of-orders))]
-                                         (mapv (fn[a b] [ (dissoc
-                                                         (assoc a
-                                                           :further-food-cat (:food-category b)
-                                                           :further-food (:food-name b)
-                                                           :further-rating (:rating-name b)
-                                                           :further-deliverer (:deliverer-name b)) :food-category :person-birth :person-role :food-name :rating-name :deliverer-name :food-date )
-                                                         (select-keys a (if cat? [:food-category :deliverer-name] [:food-name :deliverer-name]))])
-                                              sorted-list (conj sorted-list {})))) orders-by-peoples)))))
 
 
 
@@ -255,7 +220,7 @@
 (defn get-last-order
   [pname]
   (let [g @james-graph
-         pid (first (find-vertices g {:type :person :name pname}))
+        pid (first (find-vertices g {:type :person :name pname}))
         orders (map (fn [[_ oid]] [(attrs g  oid)
                                    (attrs g pid oid)
                                    (attrs g (last (last (get-edges-by-type g oid :comesFrom))))
@@ -267,12 +232,71 @@
    :further-food (:name lastfood)
    :further-rating (:name lastrating)}))
 
+
+
+(defn travel
+  [nodes edge-type]
+  (let [nodes (if (coll? nodes)
+                (if (coll? (first nodes))
+                  (into #{} (map set nodes))
+                  #{(set nodes)})
+                #{#{nodes}})
+        g @james-graph ]
+    (into #{} (flatten (map (fn [ns]  (filter #(and (not (nil? %)) (coll? %) (not (empty? %)))
+                                              (map (fn[n] (when-not (vector? n)
+                                                            (map #(apply conj ns % %) (get-edges-by-type g n edge-type)))) ns))) nodes)))))
+
+
+
+
+
+(defn value-maps-by-ids
+  [ids]
+  (map (fn [e] (reduce (fn[m id] (let [attrs (if (vector? id)
+                                               (attrs @james-graph (first id) (second id))
+                                               (attrs @james-graph id))]
+                                   (assoc m (:type attrs) attrs))) {} e)) ids))
+
+
+
+(defn get-decision-data
+  [cat?]
+  (let [g @james-graph
+        people (find-vertices g {:type :person})
+        people-and-orders  (flatten (map #(-> %
+                                              (travel :ordered)
+                                              (travel :comesFrom)
+                                              (travel :hasRating)
+                                              (value-maps-by-ids)) people))
+        get-prefixed-attrs (fn[m prefix nogos]
+                             (put-key-prefix
+                               (apply dissoc m :label :type nogos)
+                               prefix))
+        raw-orders (map (fn [maps] (merge (get-prefixed-attrs (:person maps) :person #{:date})
+                                          (get-prefixed-attrs (:food maps) :food #{:date})
+                                          (get-prefixed-attrs (:rating maps) :rating #{:date :note})
+                                          (get-prefixed-attrs (:deliverer maps) :deliverer #{:date})
+                                          (get-prefixed-attrs (decorate-time (:ordered maps)) :ordered #{})))
+                        people-and-orders)
+        orders-by-peoples (partition-by :person-name raw-orders)]
+    (into [] (apply concat (map (fn [list-of-orders] (let [sorted-list (sort-by :ordered-date  (distinct-by :ordered-date  list-of-orders))]
+                                                       (mapv (fn[a b] [ (dissoc
+                                                                          (assoc a
+                                                                            :further-food (:food-name b)
+                                                                            :further-food-cat (:food-categorie b)
+                                                                            :further-rating (:rating-name b)
+                                                                            :further-deliverer (:deliverer-name b)) :food-category :person-birth :person-role :food-name :rating-name :deliverer-name :ordered-date :ordered-count )
+                                                                        (select-keys a (if cat? [:food-category :deliverer-name] [:food-name :deliverer-name]))])
+                                                             sorted-list (conj sorted-list {})))) orders-by-peoples)))))
+
+
+
+
+
 ; ############################################
 
-(def traindata (get-decision-data false))
+;(def traindata (get-decision-data false))
 
-(doseq  [s traindata]
-  (println s))
 
 
 ; Some default data
@@ -395,5 +419,6 @@
    )
 
 
+
 ;(nodes-filtered-by #(= "Sören" (:name %)) data-graph)
- ;(view @james-graph)
+;(view @james-graph)

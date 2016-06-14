@@ -24,6 +24,13 @@
                          (cons x (flat (rest c))))))))]
     (if (sequential? x) (flat x) x)))
 
+(defn put-key-prefix
+  [attrs prefix]
+  (let [ keys-of-atts (keys attrs)
+         replacement (into {} (map (fn[k] [k (->> k name (str (name prefix) "-") keyword)]) keys-of-atts ))]
+    (clojure.set/rename-keys attrs replacement)))
+
+
 
 ; ################ TIME STAFF
 
@@ -54,3 +61,5 @@
   [m]
   (let [date-ts (:date m)]
     (merge m {:day-of-week (weekday-by-ts date-ts), :day-of-month (day-by-ts date-ts), :month  (month-by-ts date-ts), :hour (hour-by-ts date-ts)})))
+
+
