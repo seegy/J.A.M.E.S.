@@ -30,9 +30,10 @@
            (assoc acc o [i]) afn (rest aseq)))))))
 
 
+
 (defn all-keys [aseq]
   "Given a list of maps, return a set containing all the keys from those maps"
-  (into #{} (flatten (map keys aseq))))
+  (into #{} (flatten2 (map keys aseq))))
 
 
 (defn gain
@@ -114,40 +115,28 @@
 
 
 (defn get-decision-for
-  [pname]
-  (let [tree (build-decision-tree (get-decision-data))
+  ([pname cat?]
+  (let [tree (build-decision-tree (get-decision-data cat?))
         timemap (decorate-time {:date (now)})
         feed (merge timemap (get-last-order pname))]
     (first (most-frequent-n 1 (filter #(not (nil? %))
                                       (map #(tree-decide tree %) (all-submaps feed)))))))
-
+  ([pname]
+   (get-decision-for pname true)))
 
 
 ; #####################################################################################################
 
-(def sample-data
-  [[{:outlook "Sunny",    :temperature "Hot",   :humidity  "High",   :wind  "Weak"},    "No"],
-   [{:outlook "Sunny",    :temperature "Hot",   :humidity  "High",   :wind  "Strong"},  "No"],
-   [{:outlook "Overcast", :temperature  "Hot",  :humidity  "High",   :wind  "Weak"},   "Yes"],
-   [{:outlook "Rain",     :temperature  "Mild", :humidity  "High",   :wind  "Weak"},   "Yes"],
-   [{:outlook "Rain",     :temperature  "Cool", :humidity  "Normal", :wind  "Weak"},   "Yes"],
-   [{:outlook "Rain",     :temperature  "Cool", :humidity  "Normal", :wind  "Strong"}, "No"],
-   [{:outlook "Overcast", :temperature  "Cool", :humidity  "Normal", :wind  "Strong"}, "Yes"],
-   [{:outlook "Sunny",    :temperature  "Mild", :humidity  "High",   :wind  "Weak"},   "No"],
-   [{:outlook "Sunny",    :temperature  "Cool", :humidity  "Normal", :wind  "Weak"},   "Yes"],
-   [{:outlook "Rain",     :temperature  "Mild", :humidity  "Normal", :wind  "Weak"},   "Yes"],
-   [{:outlook "Sunny",    :temperature  "Mild", :humidity  "Normal", :wind  "Strong"}, "Yes"],
-   [{:outlook "Overcast", :temperature  "Mild", :humidity  "High",   :wind  "Strong"}, "Yes"],
-   [{:outlook "Overcast", :temperature  "Hot",  :humidity  "Normal", :wind  "Weak"},   "Yes"],
-   [{:outlook "Rain",     :temperature  "Mild", :humidity  "High",   :wind  "Strong"}, "No"]]
-)
 
+(def traindata (get-decision-data false))
 
-(build-decision-tree sample-data)
+(doseq  [s traindata]
+  (println s))
+;(build-decision-tree (get-decision-data false))
 
-(get-decision-for "Sören")
-(get-decision-for "Silvia")
-(get-decision-for "Heiko")
+;(get-decision-for "Sören")
+;(get-decision-for "Silvia")
+;(get-decision-for "Heiko")
 
 
 

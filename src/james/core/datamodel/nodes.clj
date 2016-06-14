@@ -218,7 +218,7 @@
      (step coll #{}))))
 
 (defn get-decision-data
-  []
+  [cat?]
   (let [g @james-graph
         people (find-vertices g {:type :person})
         people-and-orders (map (fn [p] [p (into #{} (remove #(= % p ) (flatten (get-edges-by-type g p :ordered))))]) people)
@@ -232,7 +232,7 @@
                                                                                                                (apply dissoc (attrs g id) :label :type nogos)
                                                                                                                prefix)))]
                                                               (merge (get-prefixed-attrs pid :person #{:date})
-                                                                     (decorate-time (get-prefixed-attrs foodid :food #{}))
+                                                                     (decorate-time (assoc (get-prefixed-attrs foodid :food #{}) :food-date (:date (attrs g pid foodid))))
                                                                      (get-prefixed-attrs rating :rating #{:date :note})
                                                                      (get-prefixed-attrs deliverer :deliverer #{:date})
                                                                      ))) orders)) people-and-orders))
@@ -241,11 +241,14 @@
     (into [] (apply concat (map (fn [list-of-orders] (let [sorted-list (sort-by :food-date (distinct-by :food-date list-of-orders))]
                                          (mapv (fn[a b] [ (dissoc
                                                          (assoc a
+                                                           :further-food-cat (:food-category b)
                                                            :further-food (:food-name b)
                                                            :further-rating (:rating-name b)
-                                                           :further-deliverer (:deliverer-name b)) :person-birth :person-role :food-name :rating-name :deliverer-name :food-date )
-                                                         (select-keys a [:food-name :deliverer-name])])
+                                                           :further-deliverer (:deliverer-name b)) :food-category :person-birth :person-role :food-name :rating-name :deliverer-name :food-date )
+                                                         (select-keys a (if cat? [:food-category :deliverer-name] [:food-name :deliverer-name]))])
                                               sorted-list (conj sorted-list {})))) orders-by-peoples)))))
+
+
 
 
 
@@ -254,89 +257,139 @@
   (let [g @james-graph
          pid (first (find-vertices g {:type :person :name pname}))
         orders (map (fn [[_ oid]] [(attrs g  oid)
+                                   (attrs g pid oid)
                                    (attrs g (last (last (get-edges-by-type g oid :comesFrom))))
                                    (attrs g (last (last (get-edges-by-type g oid :hasRating))))]) (get-edges-by-type g pid :ordered))
-       [lastorder lastdeliverer lastrating] (apply max-key #(:date (second %)) orders)]
+       [lastfood lastorder lastdeliverer lastrating] (apply max-key #(:date (second %)) orders)]
   {:person-name pname
+   :further-food-cat (:category lastfood)
    :further-deliverer (:name lastdeliverer)
-   :further-food (:name lastorder)
+   :further-food (:name lastfood)
    :further-rating (:name lastrating)}))
-#_(
-
-(get-last-order "Heiko")
-(map second (get-edges-by-type @james-graph (first (find-vertices @james-graph {:type :person :name "Heiko"})) :ordered))
-
-(map #(get-edges-by-type @james-graph % :hasRating)
-     ["d6613663-a58d-4db2-868f-a519ab3ae5d5" "481b2bb7-d671-49ca-a6e2-12c5e49bfb29"
-      "71d19261-2293-445e-bd24-7db7c48efd1c"])
-
-(attrs @james-graph "481b2bb7-d671-49ca-a6e2-12c5e49bfb29"  )
-    )
 
 ; ############################################
+
+(def traindata (get-decision-data false))
+
+(doseq  [s traindata]
+  (println s))
 
 
 ; Some default data
 
 #_(
+    (add-order-with-rating "1"
+                          (add-food "Schnitzel Napoli"
+                                    (find-or-create-deliverer "Schnitzelhaus" {}) {:category "Schnitzel"})
+                          1
+                          1459182354000 3 "")
+
+    (add-order-with-rating (find-or-create-person "Silvia" {})
+                          (add-food "Chicken Wrap"
+                                    (find-or-create-deliverer "Schnitzelhaus" {}) {:category "Wrap"})
+                          1
+                          1459182354000 4 "")
+
+    (add-order-with-rating "1"
+                          (add-food "Drehspieß Wrap"
+                                    (find-or-create-deliverer "Schnitzelhaus" {}) {:category "Wrap"})
+                          1
+                          1459182354000 2 "")
+
+    (add-order-with-rating "1"
+                          (add-food "Gyros Teller"
+                                    (find-or-create-deliverer "Vulkan" {}) {:category "Griechisch"})
+                          1
+                          1460929074000 3 "")
+
+    (add-order-with-rating "1"
+                          (add-food "Pizza Tonno"
+                                    (find-or-create-deliverer "Himalaya" {}) {:category "Pizza"})
+                          1
+                          1459282374000 4 "")
+
+      (add-order-with-rating "1"
+                          (add-food "Pizza Tonno"
+                                    (find-or-create-deliverer "Himalaya" {}) {:category "Pizza"})
+                          1
+                          1461510294000 4 "")
+
+   (add-order-with-rating (find-or-create-person "Silvia" {})
+                          (add-food "Pizza Quattro Stagioni"
+                                    (find-or-create-deliverer "Himalaya" {}) {:category "Pizza"})
+                          1
+                          1461510294000 4 "")
+
+    (add-order-with-rating "1"
+                          (add-food "Hawaii-Schnitzel"
+                                    (find-or-create-deliverer "Schnitzelhaus" {}) {:category "Schnitzel"})
+                          1
+                          1462478874000 4 "")
+
+    (add-order-with-rating (find-or-create-person "Silvia" {})
+                          (add-food "Pasta Classico"
+                                    (find-or-create-deliverer "Schnitzelhaus" {}) {:category "Pasta"})
+                          1
+                          1462478874000 2 "")
+
    (add-order-with-rating "1"
                           (add-food "Pizza-Brötchen"
-                                    (find-or-create-deliverer "Napoli" {}) {})
+                                    (find-or-create-deliverer "Napoli" {}) {:category "Beilage"})
                           1
                           1464192331000 5 "")
 
    (add-order-with-rating "1"
                           (add-food "Mam Burger"
-                                    (find-or-create-deliverer "Napoli" {}) {})
+                                    (find-or-create-deliverer "Napoli" {}) {:category "Burger"})
                           1
                           1464192331000 3 "")
 
    (add-order-with-rating (find-or-create-person "Heiko" {})
                           (add-food "Pizza-Brötchen"
-                                    (find-or-create-deliverer "Napoli" {}) {})
+                                    (find-or-create-deliverer "Napoli" {}) {:category "Beilage"})
                           1
                           1464192331000 4 "")
 
 
    (add-order-with-rating (find-or-create-person "Heiko" {})
                           (add-food "Pizza"
-                                    (find-or-create-deliverer "Napoli" {}) {})
+                                    (find-or-create-deliverer "Napoli" {}) {:category "Pizza"})
                           1
                           1464192331000 4 "")
 
    (add-order-with-rating "1"
                           (add-food "Ente süß-sauer"
-                                    (find-or-create-deliverer "China Boy" {}) {})
+                                    (find-or-create-deliverer "China Boy" {}) {:category "Chinesisch"})
                           1
                           1464283100347 2 "")
 
    (add-order-with-rating "1"
                           (add-food "Pizza-Brötchen"
-                                    (find-or-create-deliverer "Napoli" {}) {})
+                                    (find-or-create-deliverer "Napoli" {}) {:category "Beilage"})
                           1
                           1458492283000 4 "")
 
    (add-order-with-rating "1"
-                          (add-food "Pizza"
-                                    (find-or-create-deliverer "Napoli" {}) {})
+                          (add-food "Pizza Momento"
+                                    (find-or-create-deliverer "Napoli" {}) {:category "Pizza"})
                           1
                           1458492283000 3 "")
 
    (add-order-with-rating "1"
                           (add-food "Pizza Hawaii"
-                                    (find-or-create-deliverer "Himalaya" {}) {})
+                                    (find-or-create-deliverer "Himalaya" {}) {:category "Pizza"})
                           1
-                          (now) 3 "")
+                          1464552710045 3 "")
 
    (add-order-with-rating (find-or-create-person "Silvia" {})
                           (add-food "Pizza Tonno"
-                                    (find-or-create-deliverer "Himalaya" {}) {})
+                                    (find-or-create-deliverer "Himalaya" {}) {:category "Pizza"})
                           1
-                          (now) 3 "")
+                          1464552710045 3 "")
 
   (add-order-with-rating (find-or-create-person "Heiko" {})
                           (add-food "Enchilada"
-                                    (find-or-create-deliverer "Vulkan" {}) {})
+                                    (find-or-create-deliverer "Vulkan" {}) {:category "Wrap"})
                           1
                           1465334571000 5 "")
    )
